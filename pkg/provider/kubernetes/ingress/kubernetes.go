@@ -356,32 +356,34 @@ func (p *Provider) loadConfigurationFromIngresses(ctx context.Context, client Cl
 					continue
 				}
 
-				service, err := p.loadService(client, ingress.Namespace, pa.Backend)
-				if err != nil {
-					logger.Error().
-						Str("serviceName", pa.Backend.Service.Name).
-						Str("servicePort", pa.Backend.Service.Port.String()).
-						Err(err).
-						Msg("Cannot create service")
-					continue
-				}
-
-				if len(service.LoadBalancer.Servers) == 0 && !p.AllowEmptyServices {
-					logger.Error().
-						Str("serviceName", pa.Backend.Service.Name).
-						Str("servicePort", pa.Backend.Service.Port.String()).
-						Msg("Skipping service: no endpoints found")
-					continue
-				}
-
 				portString := pa.Backend.Service.Port.Name
-
 				if len(pa.Backend.Service.Port.Name) == 0 {
 					portString = strconv.Itoa(int(pa.Backend.Service.Port.Number))
 				}
 
 				serviceName := provider.Normalize(ingress.Namespace + "-" + pa.Backend.Service.Name + "-" + portString)
-				conf.HTTP.Services[serviceName] = service
+
+				if _, exists := conf.HTTP.Services[serviceName]; !exists {
+					service, err := p.loadService(client, ingress.Namespace, pa.Backend)
+					if err != nil {
+						logger.Error().
+							Str("serviceName", pa.Backend.Service.Name).
+							Str("servicePort", pa.Backend.Service.Port.String()).
+							Err(err).
+							Msg("Cannot create service")
+						continue
+					}
+
+					if len(service.LoadBalancer.Servers) == 0 && !p.AllowEmptyServices {
+						logger.Error().
+							Str("serviceName", pa.Backend.Service.Name).
+							Str("servicePort", pa.Backend.Service.Port.String()).
+							Msg("Skipping service: no endpoints found")
+						continue
+					}
+
+					conf.HTTP.Services[serviceName] = service
+				}
 
 				rt, err := p.loadRouter(rule, pa, rtConfig, serviceName)
 				if err != nil {
